@@ -7,6 +7,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
 import android.media.ExifInterface;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.support.v4.content.FileProvider;
@@ -17,6 +18,8 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.Toast;
+
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
@@ -25,6 +28,7 @@ import java.util.Date;
 
 public class MainActivity extends AppCompatActivity {
     private static final int ACTION_TAKE_PHOTO = 1;
+    private static final int ACTION_TAKE_PHOTO_LEGACY = 2;
     private static final String JPEG_FILE_PREFIX = "IMG_";
     private static final String JPEG_FILE_SUFFIX = ".jpg";
     private BaseAlbumDirFactory mAlbumDirectoryFactory = new BaseAlbumDirFactory();
@@ -40,28 +44,48 @@ public class MainActivity extends AppCompatActivity {
         pciBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Intent takePic = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                try {
-                    if (takePic.resolveActivity(getPackageManager()) != null){
-                        File f = setUpPhotoFile();
-                        if (f != null){
-                            Uri photoURI = FileProvider.getUriForFile(parentContext, "com.example.android.fileprovider", f);
-                            takePic.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
-                            startActivityForResult(takePic, ACTION_TAKE_PHOTO);
-                        } else {
-                            Toast.makeText(parentContext, "could not create directory for image", Toast.LENGTH_SHORT).show();
-                        }
-
-                    } else {
-                        Toast.makeText(parentContext, "could not create directory for image", Toast.LENGTH_SHORT).show();
-                    }
-
-                } catch (Exception e) {
-                    e.printStackTrace();
+                String buildRel = Build.VERSION.RELEASE;
+                String[] buildRelMain = buildRel.split("\\.");
+                if (Integer.parseInt(buildRelMain[0]) > 4){
+                    setupNormalPictureIntent();
+                }   else {
+                    setupOldPictureIntent();
                 }
 
             }
         });
+    }
+
+    private void setupNormalPictureIntent(){
+        Intent takePic = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        try {
+            if (takePic.resolveActivity(getPackageManager()) != null){
+                File f = setUpPhotoFile();
+                if (f != null){
+                    Uri photoURI = FileProvider.getUriForFile(this, "com.example.android.fileprovider", f);
+                    takePic.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
+                    startActivityForResult(takePic, ACTION_TAKE_PHOTO);
+                } else {
+                    Toast.makeText(this, "could not create directory for image", Toast.LENGTH_SHORT).show();
+                }
+
+            } else {
+                Toast.makeText(this, "could not create directory for image", Toast.LENGTH_SHORT).show();
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void setupOldPictureIntent(){
+        try {
+            Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+
+            startActivityForResult(takePictureIntent, ACTION_TAKE_PHOTO_LEGACY);
+        } catch (SecurityException se){
+            Toast.makeText(getApplicationContext(), "permissions issue", Toast.LENGTH_LONG).show();
+        }
     }
 
     private File getAlbumDir(){
@@ -106,7 +130,7 @@ public class MainActivity extends AppCompatActivity {
         int targetH = target.getHeight();
 
         BitmapFactory.Options bmOptions = new BitmapFactory.Options();
-        
+
         bmOptions.inJustDecodeBounds = false;
         bmOptions.inSampleSize = 0;
         bmOptions.inPurgeable = true;
@@ -175,6 +199,13 @@ public class MainActivity extends AppCompatActivity {
         resetPic(picCont);
     }
 
+    private void handleLegacyPictureRequest(Intent data){
+        Bitmap photo = (Bitmap) data.getExtras().get("data");
+
+        ImageView mAddEnrolleeImage = (ImageView)findViewById(R.id.imageCap);
+        mAddEnrolleeImage.setImageBitmap(photo);
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data){
         switch (requestCode){
@@ -186,6 +217,14 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(this, "PICTURE NOT TAKEN", Toast.LENGTH_SHORT).show();
                 }
                 break;
+            case ACTION_TAKE_PHOTO_LEGACY:
+                if (resultCode == RESULT_OK){
+                    handleLegacyPictureRequest(data);
+                }
+                else {
+                    Toast.makeText(this, "PICTURE NOT TAKEN", Toast.LENGTH_SHORT).show();
+                }
+
             default:
                 //Toast.makeText(this, "result code not ok", Toast.LENGTH_SHORT).show();
         }
